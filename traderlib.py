@@ -34,7 +34,7 @@ class Trader:
         self.pctMargin = gvars.limitOrderMargin/100
 
     def is_tradable(self,ticker,direction=False):
-        # this function checks wether the asset is tradable
+        # this function checks whether the asset is tradable
         # it may not be shortable. If so, the function locks it
 
         try:
@@ -44,10 +44,10 @@ class Trader:
                 return False
             else:
                 if direction:
-                    if (direction is 'sell') and (not asset.shortable):
+                    if (direction == 'sell') and (not asset.shortable):
                         self._L.info('%s is not shortable, locking it' % ticker)
                         return False
-                    elif (direction is 'buy') and (not asset.tradable):
+                    elif (direction == 'buy') and (not asset.tradable):
                         self._L.info('%s is not tradable, locking it' % ticker)
                         return False
 
@@ -72,13 +72,12 @@ class Trader:
         self._L.info('#\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t#')
 
     def set_stoploss(self,stopLoss,direction):
-        #this function takes a price as a input and sets the stoploss there
-
+        #this function takes a price as an input and sets the stoploss there
         try:
-            if direction is 'buy':
-                self.stopLoss = float(stopLoss - stopLoss*gvars.stopLossMargin)
-            elif direction is 'sell':
-                self.stopLoss = float(stopLoss + stopLoss*gvars.stopLossMargin)
+            if direction == 'buy':
+                self.stopLoss = float(entryPrice*0.9)
+            elif direction == 'sell':
+                self.stopLoss = float(stopLoss*1.1)
             else:
                 raise ValueError
         except Exception as e:
@@ -96,13 +95,16 @@ class Trader:
 
         diff = entryPrice - stopLoss
         try:
-            self.takeProfit = round(entryPrice + diff*gvars.gainRatio,2)
-            # long: if I enter at 10$ with stop loss at 8$, take profit = 10$ + (10$-8$)*2 = 14
-            # short: if I enter at 10$ with stop loss at 12$, take profit = 10$ + (10$-12$)*2 = 6
+            if direction == 'buy':
+                self.takeProfit = round(entryPrice*1.3,2)
+            elif direction == 'sell':
+                self.takeProfit = round(entryprice*0.7,2)
+            else:
+                raise ValueError
         except Exception as e:
-            self._L.info('ERROR_TP! Direction was not clear when setting stoploss!')
+            self._L.info('ERROR_TP! Direction was not clear when setting stopLoss!')
             self._L.info(e)
-            self.takeProfit = round(entryPrice + diff*1.5,2)
+            self.takeProfit = round(entryPrice + diff*3,2)
 
         return self.takeProfit
 
@@ -197,22 +199,22 @@ class Trader:
         qty = orderDict['qty']
         time_in_force = 'gtc'
 
-        if orderDict['type'] is 'limit': # adjust order for a limit type
+        if orderDict['type'] == 'limit': # adjust order for a limit type
             type = 'limit'
             self._L.info('Desired limit price for limit order: %.3f$' % orderDict['limit_price'])
 
-            if side is 'buy':
+            if side == 'buy':
                 limit_price = orderDict['limit_price'] * (1+self.pctMargin)
                 # this line modifies the price that comes from the orderDict
                 # adding the needed flexibility for making sure the order goes through
-            elif side is 'sell':
+            elif side == 'sell':
                 limit_price = orderDict['limit_price'] * (1-self.pctMargin)
             else:
                 self._L.info('Side not identified: ' + str(side))
                 block_thread(self._L,e,self.thName)
             self._L.info('Corrected (added margin) limit price: %.3f$' % limit_price)
 
-        elif orderDict['type'] is 'market': # adjust order for a market type
+        elif orderDict['type'] == 'market': # adjust order for a market type
             type = 'market'
             self._L.info('Desired limit price for market order: %.3f$' % orderDict['limit_price'])
 
@@ -233,7 +235,7 @@ class Trader:
                     self._L.info(self.order)
                     return True
 
-                elif type is 'market':
+                elif type == 'market':
                     self.order = self.alpaca.submit_order(
                                             side=side,
                                             qty=qty,
@@ -379,7 +381,7 @@ class Trader:
                 if (
                         (stock.direction == 'buy') and
                         (ema9[-1] > ema26[-1]) and
-                        (ema26[-1] > ema50[-1])
+                        (ema9[-1] > ema50[-1])
                     ):
                     self._L.info('OK: Trend going UP')
                     return True
@@ -388,7 +390,7 @@ class Trader:
                 elif (
                         (stock.direction == 'sell') and
                         (ema9[-1] < ema26[-1]) and
-                        (ema26[-1] < ema50[-1])
+                        (ema9[-1] < ema50[-1])
                     ):
                     self._L.info('OK: Trend going DOWN')
                     return True
@@ -420,11 +422,11 @@ class Trader:
             rsi = ti.rsi(stock.df.close.values, 14) # it uses 14 periods
             rsi = rsi[-1]
 
-            if (stock.direction == 'buy') and ((rsi>50) and (rsi<80)):
+            if (stock.direction == 'buy') and ((rsi<60) and (rsi>30)):
                 self._L.info('OK: RSI is %.2f' % rsi)
                 return True,rsi
 
-            elif (stock.direction == 'sell') and ((rsi<50) and (rsi>20)):
+            elif (stock.direction == 'sell') and ((rsi>50) and (rsi<75)):
                 self._L.info('OK: RSI is %.2f' % rsi)
                 return True,rsi
 
@@ -451,7 +453,7 @@ class Trader:
                                     stock.df.high.values,
                                     stock.df.low.values,
                                     stock.df.close.values,
-                                    9, 6, 9) # parameters for the curves
+                                    9, 6, 6) # parameters for the curves
                 stoch_k = stoch_k_full[-1]
                 stoch_d = stoch_d_full[-1]
 
@@ -496,17 +498,19 @@ class Trader:
         stock.avg_entry_price = float(self.alpaca.get_position(stock.name).avg_entry_price)
         ema50 = ti.ema(stock.df.close.dropna().to_numpy(), 50)
         stopLoss = self.set_stoploss(ema50,direction=stock.direction) # stoploss = EMA50
+    #    stopLoss = self.set_stoploss(stock.avg_entry_price * .9,direction=stock.direction) # stoploss = entryprice*.9 aka 10% loss
         takeProfit = self.set_takeprofit(stock.avg_entry_price,stopLoss)
 
-        if stock.direction is 'buy':
+        if stock.direction == 'buy':
             targetGainInit = int((takeProfit-stock.avg_entry_price) * sharesQty)
             reverseDirection = 'sell'
+            targetLossInit = int((stock.avg_entry_price-stopLoss) * sharesQty)
 
-        elif stock.direction is 'sell':
+        elif stock.direction == 'sell':
             targetGainInit = int((stock.avg_entry_price-takeProfit) * sharesQty)
             reverseDirection = 'buy'
+            targetLossInit = int((stock.avg_entry_price+stopLoss) * sharesQty)
 
-        self._L.info('######################################')
         self._L.info('#    TICKER       : %s'       % stock.name)
         self._L.info('#    SIDE         : %s'       % stock.direction)
         self._L.info('#    QTY          : %d'       % sharesQty)
@@ -525,7 +529,7 @@ class Trader:
         while True:
 
             targetGain = targetGainInit
-
+            targetLoss = targetLossInit
             # not at every iteration it will check every condition
             # some of them can wait
             if (stochTurn >= gvars.sleepTimes['GS']) or (timeout == 0):
@@ -545,15 +549,13 @@ class Trader:
             # calculate current gain
             if stock.direction is 'buy':
                 currentGain = (currentPrice - stock.avg_entry_price) * sharesQty
+                currentLoss = (stock.avg_entry_price - currentPrice) * sharesQty
             elif stock.direction is 'sell':
                 currentGain = (stock.avg_entry_price - currentPrice) * sharesQty
-
+                currentLoss = (currentPrice - stock.avg_entry_price) * sharesQty
 
             # if stop loss reached
-            if (
-                    (stock.direction is 'buy' and currentPrice <= stopLoss) or
-                    (stock.direction is 'sell' and currentPrice >= stopLoss)
-                ):
+            if currentLoss >= targetLoss:
                 self._L.info('STOPLOSS reached at price %.3f' % currentPrice)
                 self.success = 'NO: STOPLOSS'
                 break # break the while loop
@@ -565,9 +567,9 @@ class Trader:
                 break # break the while loop
 
             # if stochastics crossed otherwise
-            elif stochCrossed:
-                self.success = 'YES: STOCH XED WITH GAIN'
-                break # break the while loop
+        #    elif stochCrossed:
+        #        self.success = 'YES: STOCH XED WITH GAIN'
+        #        break # break the while loop
 
             else:
                 self._L.info('%s: %.2f <-- %.2f$ --> %.2f$ (gain: %.2f$)' % (stock.name,stopLoss,currentPrice,takeProfit,currentGain))
