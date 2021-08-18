@@ -71,19 +71,19 @@ class Trader:
         self._L.info('#\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t#')
         self._L.info('#\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t#')
 
-    def set_stoploss(self,stopLoss,direction):
+    def set_stoploss(self,entryPrice,direction):
         #this function takes a price as an input and sets the stoploss there
         try:
-            if direction == 'buy':
+            if stock.direction == 'buy':
                 self.stopLoss = float(entryPrice*0.9)
-            elif direction == 'sell':
-                self.stopLoss = float(stopLoss*1.1)
+            elif stock.direction == 'sell':
+                self.stopLoss = float(entryPrice*1.1)
             else:
                 raise ValueError
         except Exception as e:
             self._L.info('ERROR_SL! Direction was not clear when setting stoploss!')
             self._L.info(str(e))
-            self.stopLoss = float(stopLoss)
+            self.stopLoss = float(entryPrice)
 
         self._L.info('StopLoss set at %.2f' % self.stopLoss)
 
@@ -96,11 +96,10 @@ class Trader:
         diff = entryPrice - stopLoss
         try:
             if direction == 'buy':
-                self.takeProfit = round(entryPrice*1.3,2)
-            elif direction == 'sell':
-                self.takeProfit = round(entryprice*0.7,2)
-            else:
-                raise ValueError
+                self.takeProfit = round(entryPrice + diff*3,2)
+            if direction == 'sell':
+                self.takeProfit = round(entryPrice - diff*3,2)
+
         except Exception as e:
             self._L.info('ERROR_TP! Direction was not clear when setting stopLoss!')
             self._L.info(e)
@@ -460,19 +459,17 @@ class Trader:
                 # look for a buying condition
                 if (
                         (direction == 'buy') and
-                        (stoch_k > stoch_d) and
                         ((stoch_k <= gvars.limStoch['maxBuy']) and (stoch_d <= gvars.limStoch['maxBuy']))
                     ):
-                    self._L.info('OK: k is over d: (K,D)=(%.2f,%.2f)' % (stoch_k,stoch_d))
+                    self._L.info('OK:  k and d are within limits: (K,D)=(%.2f,%.2f)' % (stoch_k,stoch_d))
                     return True
 
                 # look for a selling condition
                 elif (
                         (direction == 'sell') and
-                        (stoch_k < stoch_d) and
                         ((stoch_d >= gvars.limStoch['minSell']) and (stoch_k >= gvars.limStoch['minSell']))
                     ):
-                    self._L.info('OK: k is under d: (K,D)=(%.2f,%.2f)' % (stoch_k,stoch_d))
+                    self._L.info('OK: k and d are within limits: (K,D)=(%.2f,%.2f)' % (stoch_k,stoch_d))
                     return True
 
                 else:
@@ -497,9 +494,9 @@ class Trader:
 
         stock.avg_entry_price = float(self.alpaca.get_position(stock.name).avg_entry_price)
         ema50 = ti.ema(stock.df.close.dropna().to_numpy(), 50)
-        stopLoss = self.set_stoploss(ema50,direction=stock.direction) # stoploss = EMA50
-    #    stopLoss = self.set_stoploss(stock.avg_entry_price * .9,direction=stock.direction) # stoploss = entryprice*.9 aka 10% loss
-        takeProfit = self.set_takeprofit(stock.avg_entry_price,stopLoss)
+    #    stopLoss = self.set_stoploss(ema50,direction=stock.direction) # stoploss = EMA50
+        stopLoss = self.set_stoploss(stock.avg_entry_price * .9,direction=stock.direction) # stoploss = entryprice*.9 aka 10% loss
+        takeProfit = self.set_takeprofit(stock.avg_entry_price*1.3)
 
         if stock.direction == 'buy':
             targetGainInit = int((takeProfit-stock.avg_entry_price) * sharesQty)
@@ -547,10 +544,10 @@ class Trader:
                 currentPrice = stock.currentPrice
 
             # calculate current gain
-            if stock.direction is 'buy':
+            if stock.direction == 'buy':
                 currentGain = (currentPrice - stock.avg_entry_price) * sharesQty
                 currentLoss = (stock.avg_entry_price - currentPrice) * sharesQty
-            elif stock.direction is 'sell':
+            elif stock.direction == 'sell':
                 currentGain = (stock.avg_entry_price - currentPrice) * sharesQty
                 currentLoss = (currentPrice - stock.avg_entry_price) * sharesQty
 
