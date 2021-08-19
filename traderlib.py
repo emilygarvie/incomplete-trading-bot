@@ -74,10 +74,10 @@ class Trader:
     def set_stoploss(self,entryPrice,direction):
         #this function takes a price as an input and sets the stoploss there
         try:
-            if stock.direction == 'buy':
-                self.stopLoss = float(entryPrice*0.9)
-            elif stock.direction == 'sell':
-                self.stopLoss = float(entryPrice*1.1)
+            if direction == 'buy':
+                self.stopLoss = float(entryPrice*0.99)
+            elif direction == 'sell':
+                self.stopLoss = float(entryPrice*1.01)
             else:
                 raise ValueError
         except Exception as e:
@@ -95,15 +95,12 @@ class Trader:
 
         diff = entryPrice - stopLoss
         try:
-            if direction == 'buy':
-                self.takeProfit = round(entryPrice + diff*3,2)
-            if direction == 'sell':
-                self.takeProfit = round(entryPrice - diff*3,2)
+                self.takeProfit = round(entryPrice + diff*gvars.gainRatio,2)
 
         except Exception as e:
             self._L.info('ERROR_TP! Direction was not clear when setting stopLoss!')
             self._L.info(e)
-            self.takeProfit = round(entryPrice + diff*3,2)
+            self.takeProfit = float(entryPrice + diff*3,2)
 
         return self.takeProfit
 
@@ -128,7 +125,7 @@ class Trader:
         attempt = 1
         while True:
             try: # fetch the data
-                if interval is '30Min':
+                if interval == '30Min':
                     df = self.alpaca.get_barset(stock.name, '5Min', limit).df[stock.name]
                     stock.df = df.resample('30min').agg({
                                         'open':'first',
@@ -495,8 +492,8 @@ class Trader:
         stock.avg_entry_price = float(self.alpaca.get_position(stock.name).avg_entry_price)
         ema50 = ti.ema(stock.df.close.dropna().to_numpy(), 50)
     #    stopLoss = self.set_stoploss(ema50,direction=stock.direction) # stoploss = EMA50
-        stopLoss = self.set_stoploss(stock.avg_entry_price * .9,direction=stock.direction) # stoploss = entryprice*.9 aka 10% loss
-        takeProfit = self.set_takeprofit(stock.avg_entry_price*1.3)
+        stopLoss = self.set_stoploss(stock.avg_entry_price,direction=stock.direction) # stoploss = entryprice*.9 aka 10% loss
+        takeProfit = self.set_takeprofit(stock.avg_entry_price,stopLoss)
 
         if stock.direction == 'buy':
             targetGainInit = int((takeProfit-stock.avg_entry_price) * sharesQty)
