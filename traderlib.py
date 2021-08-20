@@ -75,9 +75,9 @@ class Trader:
         #this function takes a price as an input and sets the stoploss there
         try:
             if direction == 'buy':
-                self.stopLoss = float(entryPrice*0.99)
+                self.stopLoss = float(entryPrice*0.98)
             elif direction == 'sell':
-                self.stopLoss = float(entryPrice*1.01)
+                self.stopLoss = float(entryPrice*1.02)
             else:
                 raise ValueError
         except Exception as e:
@@ -116,11 +116,11 @@ class Trader:
             sharesQty = int(self.operEquity/assetPrice)
             return sharesQty
 
-    def load_historical_data(self,stock,interval='1Min',limit=100):
+    def load_historical_data(self,stock,interval='3Min',limit=100):
         # this function fetches the data from Alpaca
         # it is important to check whether is updated or not
 
-        timedeltaItv = ceil(int(interval.strip('Min')) * 1.5) # 150% de l'interval, per si de cas
+        timedeltaItv = ceil(int(interval.strip('Min')) * 2) # 150% of the range, just in case
 
         attempt = 1
         while True:
@@ -145,9 +145,10 @@ class Trader:
 
             try: # check if the data is updated
 
-                lastEntry = stock.df.last('5Min').index[0] # entrada (vela) dels últims 5min
+                lastEntry = stock.df.last('5Min').index[0] # entry (ticket) of the last 5min
                 lastEntry = lastEntry.tz_convert('utc')
-                nowTimeDelta = datetime.now(timezone.utc) # ara - 5min
+                nowTimeDelta = stock.df.last('5Min').index[-1] # last ticket for the last 5min
+                nowTimeDelta = nowTimeDelta.tz_convert('utc')
 
                 diff = (lastEntry.replace(tzinfo=None) - nowTimeDelta.replace(tzinfo=None)).total_seconds()
                 diff = int(abs(diff)/60) # min
@@ -218,7 +219,7 @@ class Trader:
         attempt = 0
         while attempt < gvars.maxAttempts['SO']:
             try:
-                if type is 'limit':
+                if type == 'limit':
                     self.order = self.alpaca.submit_order(
                                             side=side,
                                             qty=qty,
@@ -377,7 +378,8 @@ class Trader:
                 if (
                         (stock.direction == 'buy') and
                         (ema9[-1] > ema26[-1]) and
-                        (ema9[-1] > ema50[-1])
+                        (ema26[-1] > ema50[-1])
+
                     ):
                     self._L.info('OK: Trend going UP')
                     return True
@@ -418,11 +420,11 @@ class Trader:
             rsi = ti.rsi(stock.df.close.values, 14) # it uses 14 periods
             rsi = rsi[-1]
 
-            if (stock.direction == 'buy') and ((rsi<60) and (rsi>30)):
+            if (stock.direction == 'buy') and ((rsi<70) and (rsi>30)):
                 self._L.info('OK: RSI is %.2f' % rsi)
                 return True,rsi
 
-            elif (stock.direction == 'sell') and ((rsi>50) and (rsi<75)):
+            elif (stock.direction == 'sell') and ((rsi>35) and (rsi<60)):
                 self._L.info('OK: RSI is %.2f' % rsi)
                 return True,rsi
 
